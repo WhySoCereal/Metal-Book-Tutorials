@@ -1,3 +1,5 @@
+//////////  SETUP ////////////////
+
 // See live views in assistant editor
 import PlaygroundSupport
 // Has customised view MTKView & convenient methods
@@ -10,13 +12,16 @@ guard let device = MTLCreateSystemDefaultDevice() else {
 
 // Set up the view
 let frame = CGRect(x: 0, y: 0, width: 600, height: 600)
-let view = MTKView(frame: frame, device: device)
+let view = MTKView(frame: frame, device: device) // View for rendering Metal Content
 view.clearColor = MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1)
 
+/////////////// THE MODEL ///////////
+
 // Model I/O - framework integrates with Metal and SceneKit
-// Manages the memory for the mesh data
-let allocator = MTKMeshBufferAllocator(device:device)
-// Model I/O creates a sphere with the specified size and returns MDLMesh with all the vertex info in buffers
+
+let allocator = MTKMeshBufferAllocator(device:device) // Manages the memory for the mesh data
+
+// Create a sphere with the specified size and returns MDLMesh with all the vertex info in buffers
 let mdlMesh = MDLMesh(sphereWithExtent: [0.2, 0.2, 0.2],
                       segments: [100, 100],
                       inwardNormals: false,
@@ -25,7 +30,9 @@ let mdlMesh = MDLMesh(sphereWithExtent: [0.2, 0.2, 0.2],
 // Convert Model I/O mesh to MetalKit mesh for metal to use it
 let mesh = try MTKMesh(mesh: mdlMesh, device: device)
 
-// Create a command queue - organizes the command buffers
+
+///////////// QUEUES, BUFFERS AND ENCODERS ///////////////
+// Create a command queue - organizes the command buffers - created once
 guard let commandQueue = device.makeCommandQueue() else {
     fatalError("Could not create the command queue")
     
@@ -54,7 +61,11 @@ let library = try device.makeLibrary(source: shader, options: nil)
 let vertexFunction = library.makeFunction(name: "vertex_main")
 let fragmentFunction = library.makeFunction(name: "fragment_main")
 
+//////////// THE PIPELINE STATE /////////////////
+
 // Set up a pipeline state for the GPU.
+// Tells GPU nothing will change until the state changes - more efficient for GPU
+// Contains all info GPU needs, i.e pixel format, depth toggle
 // Descriptor holds everything the pipeline needs to know
 // Sets up descriptor with correct shader functions and vertex descriptor
 let descriptor = MTLRenderPipelineDescriptor()
@@ -65,22 +76,24 @@ descriptor.vertexDescriptor = MTKMetalVertexDescriptorFromModelIO(mesh.vertexDes
 
 // Create the pipeline state from the descriptor:
 let pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
-// Takes valuable processing time - should be one-time setup
+// Takes valuable processing time - should be one-time setup, but in reality can be many for multiple shaders
+
+/////////////////// RENDERING ///////////////////////
 
 // Rendering - simple - fill a static view
 // Command buffer - stores all the commands that you ask the GPU to run
 guard let commandBuffer = commandQueue.makeCommandBuffer(),
 // descriptor holds data for a number of render destinations called attachments
-    // each attachment needs information such as a texture to store to, and whether to keep the texture trhoughout the render pass.
-    // the render pass desciptor is used to create the render command encoder.
+    // each attachment needs information such as a texture to store to, and whether to keep the texture throughout the render pass.
+    // the render pass descriptor is used to create the render command encoder.
 let descriptor = view.currentRenderPassDescriptor,
-// A render command encoder - holds all the information necessary to send to the GPY so that the GPU can draw the vertices.
+// A render command encoder - holds all the information necessary to send to the GPU so that the GPU can draw the vertices.
 let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor)
     else { fatalError() }
 
 // Give the render encoder the pipeline state
 renderEncoder.setRenderPipelineState(pipelineState)
-// Give sphere mesh buffer to the render encoder, offset is position in buffer where vertex info starts, index is how the GPU vertex shader will locate this buffer.
+// Give sphere mesh buffer to the render encoder, offset its position in buffer where vertex info starts, index is how the GPU vertex shader will locate this buffer.
 renderEncoder.setVertexBuffer(mesh.vertexBuffers[0].buffer, offset: 0, index: 0)
 
 // Vertices only need to be rendered once since the sphere only has one submesh
@@ -109,3 +122,22 @@ commandBuffer.commit()
 
 // Show the Metal view in the assistant editor
 PlaygroundPage.current.liveView = view
+
+
+//////////// SUMMARY //////////////
+/*
+ 1. Initialise metal
+        device: MTLDevice
+        commandQueue: MTLCommandQueue
+ 
+ 2. Load a model
+        mesh: MTLMesh
+ 
+ 3. Set up the pipeline
+        Vertex function
+        Fragment function
+ 
+ 4. Render
+        commandBuffer: MTLCommandBuffer
+        renderEncoder: MTLRenderCommandEncoder
+ */
